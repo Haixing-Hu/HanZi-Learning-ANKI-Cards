@@ -1,3 +1,9 @@
+# ==============================================================================
+#                                                                              =
+#    Copyright (c) 2023. Haixing Hu                                            =
+#    All rights reserved.                                                      =
+#                                                                              =
+# ==============================================================================
 import os
 import sys
 import requests
@@ -6,122 +12,156 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Set
 
 
-def get_page_content(character: str) -> bytes:
-  """
-  获取汉字对应的汉典网页面内容
+def get_unicode_hex(ch: str) -> str:
+    """
+    获取指定汉字的Unicode编码的大写16进制表示。
 
-  :param chinese: 汉字
-  :return: 汉字对应的汉典网页面内容
-  """
-  url = f"http://www.zdic.net/hans/{quote(character)}"
-  response = requests.get(url)
-  return response.content
+    :param ch: 指定的汉字。
+    :return: 指定汉字的Unicode编码的大写16进制表示。
+    """
+    return hex(ord(ch)).upper()[2:]
+
+
+def get_image(ch: str) -> str:
+    """
+    获取指定汉字的笔顺图URL。
+
+    :param ch: 指定的汉字。
+    :return: 该汉字的笔顺图URL。
+    """
+    code = get_unicode_hex(ch)
+    return f'https://img.zdic.net/kai/jbh/{code}.gif'
+
+
+def get_dict_page_content(ch: str) -> bytes:
+    """
+    获取指定的汉字对应的百度汉语页面内容。
+
+    :param ch: 指定的汉字。
+    :return: 该汉字对应的百度汉语页面内容。
+    """
+    url = f'https://dict.baidu.com/s?wd={quote(ch)}&ptype=zici'
+    response = requests.get(url)
+    return response.content
 
 
 def get_pinyin(soup: BeautifulSoup) -> str:
-  """
-  从汉典网页面中抽取汉字的拼音
+    """
+    从百度汉语页面中抽取汉字的拼音。
 
-  :param soup: 解析后的汉典网页面对象
-  :return: 汉字的拼音
-  """
-  pinyin_element = soup.select_one('span.dicpy')
-  if pinyin_element:
-    pinyin_text = pinyin_element.contents[0].strip().split()[0]
-    return pinyin_text
-  return ''
-
-
-def get_definitions(soup: BeautifulSoup, character: str) -> str:
-  """
-  从汉典网页面中抽取汉字的解释
-
-  :param soup: 解析后的汉典网页面对象
-  :param chinese: 汉字
-  :return: 汉字的解释
-  """
-  definitions_element = soup.select_one('.content.definitions.jnr > ol')
-  if definitions_element:
-    definitions = []
-    for index, li in enumerate(definitions_element.find_all('li'), 1):
-      definition = li.text.strip().replace('～', character)
-      definitions.append(f"{index}. {definition}")
-    return '<br>'.join(definitions)
-  return ''
+    :param soup: 解析后的百度汉语页面对象。
+    :return: 该汉字的拼音。
+    """
+    pinyin_element = soup.select_one('#pinyin > span > b')
+    if pinyin_element:
+        return pinyin_element.text
+    return ''
 
 
-def collect_existing_characters(input_files: List[str]) -> Dict[str, Set[str]]:
-  """
-  收集现有的汉字、拼音和标签
+def get_pronounce(soup: BeautifulSoup) -> str:
+    """
+    从百度汉语页面中抽取汉字的发音。
 
-  :param input_files: 输入文件列表
-  :return: 包含现有汉字及其对应拼音、解释和标签的字典
-  """
-  existing_characters = {}
+    :param soup: 解析后的百度汉语页面对象。
+    :return: 该汉字的发音的mp3文件的链接。
+    """
+    pronounce_element = soup.select_one('.mp3-play')
+    if pronounce_element:
+        return pronounce_element.attrs['url']
+    return ''
 
-  for input_file in input_files:
-    with open(input_file, 'r', encoding='utf-8') as file:
-      lines = file.readlines()
-      book_name = os.path.splitext(os.path.basename(input_file))[0]
-      chapter_name = ''
-      for line in lines:
-        line = line.strip()
-        if line.startswith('#'):
-          chapter_name = line[1:].strip()
-        elif line:
-          tag = f'{book_name}{chapter_name}'
-          characters = [c.strip() for c in line.split('、') if c.strip()]
-          total = len(characters)
-          current = 0
-          for c in characters:
+
+def get_definitions(soup: BeautifulSoup, char: str) -> str:
+    """
+    从百度汉语页面中抽取汉字的解释。
+
+    :param soup: 解析后的百度汉语页面对象。
+    :param char: 指定的汉字。
+    :return: 对该汉字的解释。
+    """
+    definitions_elements = soup.select('#basicmean-wrapper > .tab-content > dl > dd > p')
+    if definitions_elements:
+        definitions = []
+        for p in definitions_elements:
+            definition = p.text.strip().replace('～', char)
+            definitions.append(definition)
+        return '<br>'.join(definitions)
+    return ''
+
+
+def collect_characters(input_files: List[str]) -> Dict[str, Set[str]]:
+    """
+    收集所有待制作卡片的汉字及其标签。
+
+    :param input_files: 输入文件的文件名列表。
+    :return: 包含所有汉字及其对应的标签的字典。
+    """
+    result = {}
+    for input_file in input_files:
+        print(f'Processing input file: {input_file}')
+        with open(input_file, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+            book_name = os.path.splitext(os.path.basename(input_file))[0]
+            chapter_name = ''
+            for line in lines:
+                line = line.strip()
+                if line.startswith('#'):
+                    chapter_name = line[1:].strip()
+                elif line:
+                    tag = f'{book_name}{chapter_name}'
+                    chars = [c.strip() for c in line.split('、') if c.strip()]
+                    total = len(chars)
+                    current = 0
+                    for c in chars:
+                        current += 1
+                        if c in result:
+                            result[c].add(tag)
+                        else:
+                            result[c] = {tag}
+                        print(f'Reading character {current}/{total}: {c} [{tag}]')
+    return result
+
+
+def generate_cards(characters: Dict[str, Set[str]], output_file: str):
+    """
+    生成Anki卡片表格数据并将其写入输出文件。
+
+    :param characters: 包含现有汉字及其对应标签的字典
+    :param output_file: 输出文件名。
+    """
+    total = len(characters)
+    current = 0
+    with open(output_file, 'w', encoding='utf-8') as file:
+        for ch, tags in characters.items():
             current += 1
-            if c in existing_characters:
-              existing_characters[c].add(tag)
-            else:
-              existing_characters[c] = set([tag])
+            content = get_dict_page_content(ch)
+            soup = BeautifulSoup(content, 'html.parser')
+            image = get_image(ch)
+            pinyin = get_pinyin(soup)
+            pronounce = get_pronounce(soup)
+            definitions = get_definitions(soup, ch)
+            tags_str = ' '.join(tags)
+            line = f'{tags_str} | {ch} | {pinyin} | {definitions} | {image} | {pronounce}\n'
+            file.write(line)
             progress = current / total * 100
-            print(f'Reading character {current}/{total} - Progress: {progress:.2f}% : {c} [{tag}]')
-  return existing_characters
-
-
-def generate_cards(existing_characters: Dict[str, Set[str]], output_file: str):
-  """
-  生成Anki卡片并将其写入输出文件
-
-  :param existing_characters: 包含现有汉字及其对应标签的字典
-  :param output_file: 输出文件名
-  """
-  total = len(existing_characters)
-  current = 0
-  with open(output_file, 'w', encoding='utf-8') as file:
-    for character, tags in existing_characters.items():
-      current += 1
-      content = get_page_content(character)
-      soup = BeautifulSoup(content, 'html.parser')
-      pinyin = get_pinyin(soup)
-      definitions = get_definitions(soup, character)
-      tags_str = ' '.join(tags)
-      line = f'{tags_str} | {character} | {pinyin} | {definitions}\n'
-      file.write(line)
-      progress = current / total * 100
-      print(f'Processing character {current}/{total} - Progress: {progress:.2f}% : {character} [{tags_str}]')
+            print(f'Processing character {current}/{total} - Progress: {progress:.2f}% : {ch} [{tags_str}]')
 
 
 def main():
-  if len(sys.argv) < 3:
-    print("Usage: python3 pinyin_dict.py input_file1 input_file2 ... output_file")
-    return
+    if len(sys.argv) < 3:
+        print("Usage: python3 pinyin_dict.py input_file1 input_file2 ... output_file")
+        return
 
-  input_files = sys.argv[1:-1]
-  output_file = sys.argv[-1]
+    input_files = sys.argv[1:-1]
+    output_file = sys.argv[-1]
 
-  # 删除已存在的输出文件
-  if os.path.exists(output_file):
-    os.remove(output_file)
+    # 删除已存在的输出文件
+    if os.path.exists(output_file):
+        os.remove(output_file)
 
-  existing_words = collect_existing_characters(input_files)
-  generate_cards(existing_words, output_file)
+    characters = collect_characters(input_files)
+    generate_cards(characters, output_file)
 
 
 if __name__ == '__main__':
-  main()
+    main()
