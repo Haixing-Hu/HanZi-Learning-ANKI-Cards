@@ -92,7 +92,7 @@ def generate_cards(characters: Dict[str, Set[str]], output_file: str):
             pinyin = page.get_pinyin()
             pronounce = page.get_pronounce()
             definitions = page.get_definitions()
-            line = f'{tags_str} | {ch} | {pinyin} | {definitions} | {image} | {pronounce}\n'
+            line = f'{ch}|{pinyin}|{image}|{pronounce}|{definitions}|{tags_str}\n'
             file.write(line)
 
 
@@ -103,8 +103,8 @@ def main():
     input_files = sys.argv[1:-1]
     output_file = sys.argv[-1]
 
-    logging.basicConfig(level=logging.DEBUG,
-                        format="%(asctime)s %(levelname)s %(name)s - %(message)s")
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s - %(message)s")
     if os.path.exists(output_file):
         os.remove(output_file)
     characters = collect_characters(input_files)
