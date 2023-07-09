@@ -9,41 +9,13 @@ import os
 import sys
 from typing import List, Dict, Set
 
-from dict_page import DictPage
-from zdic_dict_page import ZdicDictPage
-from baidu_dict_page import BaiduDictPage
 
-DICT_PAGE_TYPE = 'zdic'
-"""
-字典页面的类型，可选值为：
-
-- `'zdic'`: 表示使用汉典页面数据
-- `'baidu'`: 表示使用百度汉语页面数据
-"""
-
-
-def get_dict_page(ch: str) -> DictPage:
+def collect_words(input_files: List[str]) -> Dict[str, Set[str]]:
     """
-    获取指定汉字的字典页面。
-
-    :param ch: 指定的汉字。
-    :return: 指定汉字的字典页面。
-    """
-    match DICT_PAGE_TYPE:
-        case 'zdic':
-            return ZdicDictPage(ch)
-        case 'baidu':
-            return BaiduDictPage(ch)
-        case _:
-            raise ValueError(f'Unknown dict page type: {DICT_PAGE_TYPE}')
-
-
-def collect_characters(input_files: List[str]) -> Dict[str, Set[str]]:
-    """
-    收集所有待制作卡片的汉字及其标签。
+    收集所有待制作卡片的生词及其标签。
 
     :param input_files: 输入文件的文件名列表。
-    :return: 包含所有汉字及其对应的标签的字典。
+    :return: 包含所有生词及其对应的标签的字典。
     """
     logger = logging.getLogger(__name__)
     result = {}
@@ -68,31 +40,26 @@ def collect_characters(input_files: List[str]) -> Dict[str, Set[str]]:
                             result[c].add(tag)
                         else:
                             result[c] = {tag}
-                        logger.info('Reading character %d/%d: %s [%s]', current, total, c, tag)
+                        logger.info('Reading word %d/%d: %s [%s]', current, total, c, tag)
     return result
 
 
-def generate_cards(characters: Dict[str, Set[str]], output_file: str):
+def generate_cards(words: Dict[str, Set[str]], output_file: str):
     """
     生成Anki卡片表格数据并将其写入输出文件。
 
-    :param characters: 包含现有汉字及其对应标签的字典
+    :param words: 包含现有生词及其对应标签的字典
     :param output_file: 输出文件名。
     """
     logger = logging.getLogger(__name__)
-    total = len(characters)
+    total = len(words)
     current = 0
     with open(output_file, 'w', encoding='utf-8') as file:
-        for ch, tags in characters.items():
+        for word, tags in words.items():
             current += 1
             tags_str = ' '.join(tags)
-            logger.info('Processing character %d/%d: %s [%s]', current, total, ch, tags_str)
-            page = get_dict_page(ch)
-            image = page.get_image()
-            pinyin = page.get_pinyin()
-            pronounce = page.get_pronounce()
-            definitions = page.get_definitions()
-            line = f'{ch}|{pinyin}|{image}|{pronounce}|{definitions}|{tags_str}\n'
+            logger.info('Processing word %d/%d: %s [%s]', current, total, word, tags_str)
+            line = f'{word}|{tags_str}\n'
             file.write(line)
 
 
@@ -107,8 +74,8 @@ def main():
                         format='%(asctime)s %(levelname)s - %(message)s')
     if os.path.exists(output_file):
         os.remove(output_file)
-    characters = collect_characters(input_files)
-    generate_cards(characters, output_file)
+    words = collect_words(input_files)
+    generate_cards(words, output_file)
 
 
 if __name__ == '__main__':
